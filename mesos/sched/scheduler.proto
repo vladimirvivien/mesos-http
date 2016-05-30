@@ -16,13 +16,9 @@
 
 syntax = "proto2";
 
-import "mesos.proto";
-
 package mesos;
-
-option java_package = "org.apache.mesos.v1.scheduler";
-option java_outer_classname = "Protos";
-
+import "github.com/vladimirvivien/mesos-http/mesos/mesos/mesos.proto";
+option go_package = "sched";
 
 
 /**

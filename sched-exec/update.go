@@ -8,11 +8,6 @@ import (
 )
 
 func (s *scheduler) status(status *mesos.TaskStatus) {
-	log.Println(
-		"Task ID ", status.TaskId.GetValue(),
-		" state = ", status.GetState().String(),
-		" message = ", status.GetMessage(),
-	)
 
 	if status.GetState() == mesos.TaskState_TASK_LOST ||
 		status.GetState() == mesos.TaskState_TASK_KILLED ||
@@ -40,7 +35,7 @@ func (s *scheduler) status(status *mesos.TaskStatus) {
 		}
 
 		// send call
-		resp, err := s.callClient.Send(call)
+		resp, err := s.client.Send(call)
 		if err != nil {
 			log.Println("Unable to send Acknowledge Call: ", err)
 			return
@@ -52,7 +47,11 @@ func (s *scheduler) status(status *mesos.TaskStatus) {
 
 	if status.GetState() == mesos.TaskState_TASK_ERROR {
 		s.taskFinished++
-		return
+		log.Println(
+			"Task ID ", status.TaskId.GetValue(),
+			" state = ", status.GetState().String(),
+			" message = ", status.GetMessage(),
+		)
 	}
 
 	if status.GetState() == mesos.TaskState_TASK_FINISHED {
@@ -61,6 +60,7 @@ func (s *scheduler) status(status *mesos.TaskStatus) {
 	}
 
 	if s.taskFinished == s.maxTasks {
+		log.Println("Scheduler executed all tasks")
 		s.stop()
 	}
 

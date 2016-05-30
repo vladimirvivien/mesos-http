@@ -43,11 +43,7 @@ func (s *scheduler) offers(offers []*mesos.Offer) {
 						Scalar: &mesos.Value_Scalar{Value: proto.Float64(s.memPerTask)},
 					},
 				},
-				//Executor: s.executor,
-				Command: &mesos.CommandInfo{
-					Shell: proto.Bool(true),
-					Value: proto.String("echo Hello"),
-				},
+				Executor: s.executor,
 			}
 			tasks = append(tasks, task)
 			s.taskLaunched++
@@ -77,7 +73,7 @@ func (s *scheduler) offers(offers []*mesos.Offer) {
 		}
 
 		// send call
-		resp, err := s.callClient.Send(call)
+		resp, err := s.client.Send(call)
 		if err != nil {
 			log.Println("Unable to send Accept Call: ", err)
 			continue
