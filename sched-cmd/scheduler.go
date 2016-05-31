@@ -36,7 +36,7 @@ type scheduler struct {
 // New returns a pointer to new Scheduler
 func newSched(master string, fw *mesos.FrameworkInfo, cmd *mesos.CommandInfo) *scheduler {
 	return &scheduler{
-		client:     client.New(master),
+		client:     client.New(master, "/api/v1/scheduler"),
 		framework:  fw,
 		command:    cmd,
 		cpuPerTask: 1,

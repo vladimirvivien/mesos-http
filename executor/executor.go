@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 
@@ -26,7 +27,7 @@ type executor struct {
 
 func newExec(agent string) *executor {
 	return &executor{
-		client:   client.New(agent),
+		client:   client.New(agent, "/api/v1/executor"),
 		events:   make(chan *exec.Event),
 		doneChan: make(chan struct{}),
 	}
@@ -104,11 +105,76 @@ func (e *executor) handleEvents() {
 			sub := ev.GetSubscribed()
 			log.Println("Executor subscribed with id", sub.GetExecutorInfo().GetExecutorId())
 
+		case exec.Event_LAUNCH:
+			task := ev.GetLaunch().GetTask()
+			log.Println("Launching task: ", task.GetTaskId().GetValue())
+
+			err := e.sendUpdate(task, mesos.TaskState_TASK_RUNNING.Enum())
+			if err != nil {
+				log.Fatal("Failed while sending update:", err)
+			}
+
+			// do work here...
+
+			err = e.sendUpdate(task, mesos.TaskState_TASK_FINISHED.Enum())
+			if err != nil {
+				log.Fatal("Failed while sending update:", err)
+			}
+
+		case exec.Event_ACKNOWLEDGED:
+			log.Println("ACK received:", ev.GetAcknowledged().String())
+
+		case exec.Event_MESSAGE:
+			log.Println("Message Received:", ev.GetMessage().String())
+
+		case exec.Event_KILL:
+			log.Println("Received request to kill executor")
+
+		case exec.Event_SHUTDOWN:
+			log.Println("Received shutdown request.  Shutting down...")
+			e.stop()
+
 		case exec.Event_ERROR:
 			err := ev.GetError().GetMessage()
 			log.Println(err)
 		}
 	}
+}
+
+func (e *executor) sendUpdate(task *mesos.TaskInfo, state *mesos.TaskState) error {
+	call := &exec.Call{
+		Type:        exec.Call_UPDATE.Enum(),
+		FrameworkId: e.frameworkID,
+		ExecutorId:  e.id,
+		Update: &exec.Call_Update{
+			Status: &mesos.TaskStatus{
+				TaskId:     task.TaskId,
+				ExecutorId: e.id,
+				State:      state,
+				Source:     mesos.TaskStatus_SOURCE_EXECUTOR.Enum(),
+				Uuid:       e.getUUID(),
+			},
+		},
+	}
+
+	resp, err := e.send(call)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("Update return unexpected response status: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// simple Uuid generator, illustrative only
+func (e *executor) getUUID() []byte {
+	bytes := make([]byte, 16)
+	for i := 0; i < 16; i++ {
+		bytes[i] = byte(rand.Int31n(256))
+	}
+	return bytes
 }
 
 func main() {

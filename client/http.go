@@ -18,9 +18,9 @@ type Client struct {
 	client   *http.Client
 }
 
-func New(addr string) *Client {
+func New(addr, path string) *Client {
 	return &Client{
-		url: "http://" + addr + "/api/v1/scheduler",
+		url: "http://" + addr + path,
 		client: &http.Client{
 			Transport: &http.Transport{
 				Dial: (&net.Dialer{
