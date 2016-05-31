@@ -36,7 +36,7 @@ func (s *scheduler) status(status *mesos.TaskStatus) {
 		}
 
 		// send call
-		resp, err := s.client.Send(call)
+		resp, err := s.send(call)
 		if err != nil {
 			log.Println("Unable to send Acknowledge Call: ", err)
 			return

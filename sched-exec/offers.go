@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/vladimirvivien/mesos-http/mesos"
+	"github.com/vladimirvivien/mesos-http/mesos/mesos"
+	"github.com/vladimirvivien/mesos-http/mesos/sched"
 )
 
 // Offers handle incoming offers
@@ -53,10 +54,10 @@ func (s *scheduler) offers(offers []*mesos.Offer) {
 		}
 
 		// setup launch call
-		call := &mesos.Call{
+		call := &sched.Call{
 			FrameworkId: s.framework.GetId(),
-			Type:        mesos.Call_ACCEPT.Enum(),
-			Accept: &mesos.Call_Accept{
+			Type:        sched.Call_ACCEPT.Enum(),
+			Accept: &sched.Call_Accept{
 				OfferIds: []*mesos.OfferID{
 					offer.GetId(),
 				},
@@ -73,7 +74,7 @@ func (s *scheduler) offers(offers []*mesos.Offer) {
 		}
 
 		// send call
-		resp, err := s.client.Send(call)
+		resp, err := s.send(call)
 		if err != nil {
 			log.Println("Unable to send Accept Call: ", err)
 			continue

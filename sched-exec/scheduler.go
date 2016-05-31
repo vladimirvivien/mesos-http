@@ -12,7 +12,8 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/vladimirvivien/mesos-http/client"
-	"github.com/vladimirvivien/mesos-http/mesos"
+	"github.com/vladimirvivien/mesos-http/mesos/mesos"
+	"github.com/vladimirvivien/mesos-http/mesos/sched"
 )
 
 // Scheduler represents a Mesos scheduler
@@ -24,10 +25,9 @@ type scheduler struct {
 	maxTasks     int
 
 	client     *client.Client
-	callClient *client.Client
 	cpuPerTask float64
 	memPerTask float64
-	events     chan *mesos.Event
+	events     chan *sched.Event
 	doneChan   chan struct{}
 }
 
@@ -40,7 +40,7 @@ func newSched(master string, fw *mesos.FrameworkInfo, exec *mesos.ExecutorInfo) 
 		cpuPerTask: 1,
 		memPerTask: 128,
 		maxTasks:   5,
-		events:     make(chan *mesos.Event),
+		events:     make(chan *sched.Event),
 		doneChan:   make(chan struct{}),
 	}
 }
@@ -59,18 +59,26 @@ func (s *scheduler) stop() {
 	close(s.events)
 }
 
+func (s *scheduler) send(call *sched.Call) (*http.Response, error) {
+	payload, err := proto.Marshal(call)
+	if err != nil {
+		return nil, err
+	}
+	return s.client.Send(payload)
+}
+
 // Subscribe subscribes the scheduler to the Mesos cluster.
 // It keeps the http connection opens with the Master to stream
 // subsequent events.
 func (s *scheduler) subscribe() error {
-	call := &mesos.Call{
-		Type: mesos.Call_SUBSCRIBE.Enum(),
-		Subscribe: &mesos.Call_Subscribe{
+	call := &sched.Call{
+		Type: sched.Call_SUBSCRIBE.Enum(),
+		Subscribe: &sched.Call_Subscribe{
 			FrameworkInfo: s.framework,
 		},
 	}
 
-	resp, err := s.client.Send(call)
+	resp, err := s.send(call)
 	if err != nil {
 		return err
 	}
@@ -91,7 +99,7 @@ func (s *scheduler) qEvents(resp *http.Response) {
 	}()
 	dec := json.NewDecoder(resp.Body)
 	for {
-		event := new(mesos.Event)
+		event := new(sched.Event)
 		if err := dec.Decode(event); err != nil {
 			if err == io.EOF {
 				return
@@ -107,27 +115,27 @@ func (s *scheduler) handleEvents() {
 	for ev := range s.events {
 		switch ev.GetType() {
 
-		case mesos.Event_SUBSCRIBED:
+		case sched.Event_SUBSCRIBED:
 			sub := ev.GetSubscribed()
 			s.framework.Id = sub.FrameworkId
 			log.Println("Subscribed: FrameworkID: ", sub.FrameworkId.GetValue())
 
-		case mesos.Event_OFFERS:
+		case sched.Event_OFFERS:
 			offers := ev.GetOffers().GetOffers()
 			log.Println("Received ", len(offers), " offers ")
 			go s.offers(offers)
 
-		case mesos.Event_RESCIND:
+		case sched.Event_RESCIND:
 			log.Println("Received rescind offers")
 
-		case mesos.Event_UPDATE:
+		case sched.Event_UPDATE:
 			status := ev.GetUpdate().GetStatus()
 			go s.status(status)
 
-		case mesos.Event_MESSAGE:
+		case sched.Event_MESSAGE:
 			log.Println("Received message event")
 
-		case mesos.Event_FAILURE:
+		case sched.Event_FAILURE:
 			log.Println("Received failure event")
 			fail := ev.GetFailure()
 			if fail.ExecutorId != nil {
@@ -142,11 +150,11 @@ func (s *scheduler) handleEvents() {
 				}
 			}
 
-		case mesos.Event_ERROR:
+		case sched.Event_ERROR:
 			err := ev.GetError().GetMessage()
 			log.Println(err)
 
-		case mesos.Event_HEARTBEAT:
+		case sched.Event_HEARTBEAT:
 			log.Println("HEARTBEAT")
 		}
 

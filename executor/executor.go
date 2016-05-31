@@ -1,4 +1,4 @@
-package executor
+package main
 
 import (
 	"encoding/json"
@@ -10,7 +10,8 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/vladimirvivien/mesos-http/client"
-	"github.com/vladimirvivien/mesos-http/mesos"
+	exec "github.com/vladimirvivien/mesos-http/mesos/exec"
+	"github.com/vladimirvivien/mesos-http/mesos/mesos"
 )
 
 // Scheduler represents a Mesos scheduler
@@ -19,14 +20,14 @@ type executor struct {
 	frameworkID *mesos.FrameworkID
 
 	client   *client.Client
-	events   chan *mesos.Event
+	events   chan *exec.Event
 	doneChan chan struct{}
 }
 
 func newExec(agent string) *executor {
 	return &executor{
 		client:   client.New(agent),
-		events:   make(chan *mesos.Event),
+		events:   make(chan *exec.Event),
 		doneChan: make(chan struct{}),
 	}
 }
@@ -35,35 +36,43 @@ func (e *executor) start() <-chan struct{} {
 	if err := e.subscribe(); err != nil {
 		log.Fatal(err)
 	}
-	go s.handleEvents()
-	return s.doneChan
+	go e.handleEvents()
+	return e.doneChan
 }
 
-func (s *scheduler) stop() {
-	close(s.events)
+func (e *executor) stop() {
+	close(e.events)
+}
+
+func (e *executor) send(call *exec.Call) (*http.Response, error) {
+	payload, err := proto.Marshal(call)
+	if err != nil {
+		return nil, err
+	}
+	return e.client.Send(payload)
 }
 
 func (e *executor) subscribe() error {
-	call := &mesos.Call{
+	call := &exec.Call{
 		FrameworkId: e.frameworkID,
 		ExecutorId:  e.id,
-		Type:        mesos.Call_SUBSCRIBE.Enum(),
-		Subscribe: &mesos.Call_Subscribe{
+		Type:        exec.Call_SUBSCRIBE.Enum(),
+		Subscribe: &exec.Call_Subscribe{
 			UnacknowledgedTasks:   []*mesos.TaskInfo{},
-			UnacknowledgedUpdates: []*mesos.Call_Update{},
+			UnacknowledgedUpdates: []*exec.Call_Update{},
 		},
 	}
 
-	resp, err := e.client.Send(call)
+	resp, err := e.send(call)
 	if err != nil {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("Subscribe with unexpected response status: %d", resp.StatusCode)
 	}
-	log.Println("Mesos-Stream-Id:", s.client.StreamID)
+	log.Println("Mesos-Stream-Id:", e.client.StreamID)
 
-	go s.qEvents(resp)
+	go e.qEvents(resp)
 
 	return nil
 }
@@ -71,11 +80,11 @@ func (e *executor) subscribe() error {
 func (e *executor) qEvents(resp *http.Response) {
 	defer func() {
 		resp.Body.Close()
-		close(s.events)
+		close(e.events)
 	}()
 	dec := json.NewDecoder(resp.Body)
 	for {
-		event := new(mesos.Event)
+		event := new(exec.Event)
 		if err := dec.Decode(event); err != nil {
 			if err == io.EOF {
 				return
@@ -86,17 +95,16 @@ func (e *executor) qEvents(resp *http.Response) {
 	}
 }
 
-func (s *scheduler) handleEvents() {
-	defer close(s.doneChan)
-	for ev := range s.events {
+func (e *executor) handleEvents() {
+	defer close(e.doneChan)
+	for ev := range e.events {
 		switch ev.GetType() {
 
-		case mesos.Event_SUBSCRIBED:
+		case exec.Event_SUBSCRIBED:
 			sub := ev.GetSubscribed()
-			s.framework.Id = sub.FrameworkId
-			log.Println("Subscribed: FrameworkID: ", sub.FrameworkId.GetValue())
+			log.Println("Executor subscribed with id", sub.GetExecutorInfo().GetExecutorId())
 
-		case mesos.Event_ERROR:
+		case exec.Event_ERROR:
 			err := ev.GetError().GetMessage()
 			log.Println(err)
 		}
@@ -104,13 +112,25 @@ func (s *scheduler) handleEvents() {
 }
 
 func main() {
-	exec := newExec()
-	exec.agent = os.Getenv("MESOS_AGENT_ENDPOINT")
+	agent := os.Getenv("MESOS_AGENT_ENDPOINT")
+	if agent == "" {
+		log.Fatal("MESOS_AGENT_ENDPOINT env not set")
+	}
+	fwid := os.Getenv("MESOS_FRAMEWORK_ID")
+	if fwid == "" {
+		log.Fatal("MESOS_FRAMEWORK_ID env not set")
+	}
+	execid := os.Getenv("MESOS_EXECUTOR_ID")
+	if execid == "" {
+		log.Fatal("MESOS_EXECUTOR_ID env not set")
+	}
+
+	exec := newExec(agent)
 	exec.frameworkID = &mesos.FrameworkID{
-		Value: proto.String(os.Getenv("MESOS_FRAMEWORK_ID")),
+		Value: proto.String(fwid),
 	}
 	exec.id = &mesos.ExecutorID{
-		Value: proto.String(os.Getenv("MESOS_EXECUTOR_ID")),
+		Value: proto.String(execid),
 	}
 	<-exec.start()
 }

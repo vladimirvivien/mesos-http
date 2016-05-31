@@ -4,7 +4,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/vladimirvivien/mesos-http/mesos"
+	"github.com/vladimirvivien/mesos-http/mesos/mesos"
+	"github.com/vladimirvivien/mesos-http/mesos/sched"
 )
 
 func (s *scheduler) status(status *mesos.TaskStatus) {
@@ -24,10 +25,10 @@ func (s *scheduler) status(status *mesos.TaskStatus) {
 
 	// send ack
 	if status.GetUuid() != nil {
-		call := &mesos.Call{
+		call := &sched.Call{
 			FrameworkId: s.framework.GetId(),
-			Type:        mesos.Call_ACKNOWLEDGE.Enum(),
-			Acknowledge: &mesos.Call_Acknowledge{
+			Type:        sched.Call_ACKNOWLEDGE.Enum(),
+			Acknowledge: &sched.Call_Acknowledge{
 				AgentId: status.GetAgentId(),
 				TaskId:  status.GetTaskId(),
 				Uuid:    status.GetUuid(),
@@ -35,7 +36,7 @@ func (s *scheduler) status(status *mesos.TaskStatus) {
 		}
 
 		// send call
-		resp, err := s.client.Send(call)
+		resp, err := s.send(call)
 		if err != nil {
 			log.Println("Unable to send Acknowledge Call: ", err)
 			return

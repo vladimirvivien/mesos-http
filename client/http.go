@@ -9,9 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	mesosjson "github.com/vladimirvivien/mesos-http/mesos/json"
-	sched "github.com/vladimirvivien/mesos-http/mesos/sched"
 )
 
 type Client struct {
@@ -34,11 +32,7 @@ func New(addr string) *Client {
 	}
 }
 
-func (c *Client) Send(call *sched.Call) (*http.Response, error) {
-	payload, err := proto.Marshal(call)
-	if err != nil {
-		return nil, err
-	}
+func (c *Client) Send(payload []byte) (*http.Response, error) {
 
 	httpReq, err := http.NewRequest("POST", c.url, bytes.NewReader(payload))
 	if err != nil {

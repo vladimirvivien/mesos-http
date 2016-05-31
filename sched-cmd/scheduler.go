@@ -61,6 +61,14 @@ func (s *scheduler) stop() {
 	close(s.events)
 }
 
+func (s *scheduler) send(call *sched.Call) (*http.Response, error) {
+	payload, err := proto.Marshal(call)
+	if err != nil {
+		return nil, err
+	}
+	return s.client.Send(payload)
+}
+
 // Subscribe subscribes the scheduler to the Mesos cluster.
 // It keeps the http connection opens with the Master to stream
 // subsequent events.
@@ -72,7 +80,7 @@ func (s *scheduler) subscribe() error {
 		},
 	}
 
-	resp, err := s.client.Send(call)
+	resp, err := s.send(call)
 	if err != nil {
 		return err
 	}

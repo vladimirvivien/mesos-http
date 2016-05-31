@@ -74,7 +74,7 @@ func (s *scheduler) offers(offers []*mesos.Offer) {
 		}
 
 		// send call
-		resp, err := s.client.Send(call)
+		resp, err := s.send(call)
 		if err != nil {
 			log.Println("Unable to send Accept Call: ", err)
 			continue
